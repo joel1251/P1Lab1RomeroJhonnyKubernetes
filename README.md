@@ -9,9 +9,13 @@
 
 ## 📋 Descripción del Proyecto
 
-Este laboratorio analiza experimentalmente la disponibilidad, resiliencia, escalabilidad y consistencia del estado en aplicaciones distribuidas desplegadas en Kubernetes, utilizando Node.js como backend y Grafana k6 como herramienta de generación de carga y medición de rendimiento.
+Este repositorio contiene el código fuente, los manifiestos de Kubernetes y los scripts de prueba en Grafana k6 desarrollados para el laboratorio de análisis experimental de disponibilidad, resiliencia, escalabilidad y consistencia del estado en Kubernetes.
 
-El proyecto abarca desde la contenedorización básica y orquestación con réplicas hasta retos avanzados de sincronización de estado distribuido, despliegues progresivos (Canary Deployment) y pruebas de quiebre/degradación del sistema.
+El proyecto abarca:
+1. **Reproducción de laboratorio en clase:** Contenedorización con Docker, despliegue en Kubernetes (Deployment, Service NodePort), distribución de carga entre Pods, prueba de Self-Healing, escalabilidad horizontal, Rolling Update y Rollback ante imagen errónea.
+2. **Reto 1 (Consistencia Distribuida):** Coordinador centralizado en memoria con soporte de `Idempotency-Key` y control de `epoch` para garantizar consistencia fuerte e idempotencia en 100 operaciones concurrentes.
+3. **Reto 2 (Canary Deployment):** Distribución de tráfico ponderada 80% estable (v2) y 20% candidata (v3) mediante la proporción de réplicas en Deployments paralelos.
+4. **Reto 3 (Punto de Degradación):** Evaluación progresiva de carga con k6 (20 a 500 VUs) comparando escenarios con 1, 3 y 10 réplicas, analizando los cuellos de botella en nodo único (Docker Desktop).
 
 ---
 
@@ -54,96 +58,74 @@ El proyecto abarca desde la contenedorización básica y orquestación con répl
 
 ```text
 ├── consistencia/
-│   ├── application.yaml          # Despliegue de réplicas de aplicación conectadas al coordinador
-│   ├── coordinator.yaml          # Despliegue del servicio centralizado del coordinador
+│   ├── application.yaml          # Despliegue de réplicas de aplicación (v4) conectadas al coordinador
+│   ├── coordinator.yaml          # Despliegue y servicio ClusterIP del coordinador central
 │   ├── coordinator.js            # Lógica del coordinador en memoria (idempotencia y epoch)
 │   ├── consistency-test.js       # Script k6 para prueba de 100 VUs concurrentes
-│   ├── Dockerfile                # Dockerfile para la imagen de consistencia
-│   └── server.js                 # Servidor de aplicación delegando estado al coordinador
+│   ├── Dockerfile                # Dockerfile de la imagen v4 (app + coordinador)
+│   └── server.js                 # Servidor v4 que delega el estado en el coordinador
 ├── distributed-app-lab/
 │   ├── deployment.yaml           # Despliegue base inicial
-│   ├── deployment-stable.yaml    # Manifiesto para versión estable v2 (Canary)
+│   ├── deployment-stable.yaml    # Manifiesto para versión estable v2
 │   ├── deployment-canary.yaml    # Manifiesto para versión canary v3
-│   ├── Dockerfile                # Dockerfile de la aplicación base
-│   ├── server.js                 # Código Node.js de la práctica de clase
-│   └── service.yaml              # Servicio Kubernetes tipo NodePort
-├── baseline-test.js              # Prueba k6: Línea base de rendimiento
-├── canary-test.js                # Prueba k6: Verificación de tráfico Canary (80/20)
-├── deployment.yaml               # Manifiesto de despliegue general
-├── deployment-stable.yaml        # Despliegue v2 estable
-├── deployment-canary.yaml        # Despliegue v3 canary
-├── Dockerfile                    # Dockerfile raíz
-├── Lab1_Consistencia_Disponibilidad_Romero_Jhonny.pdf # Informe final en formato ESPE
-├── Lab1RomeroJhonny.docx         # Documento fuente del informe técnico
-├── load-test.js                  # Prueba k6: Carga general
-├── resilience-test.js            # Prueba k6: Resiliencia ante eliminación de Pods (Self-healing)
+│   ├── Dockerfile                # Dockerfile base
+│   ├── server.js                 # Código Node.js configurable
+│   └── service.yaml              # Servicio Kubernetes NodePort
+├── baseline-test.js              # k6: Línea base de rendimiento
+├── canary-test.js                # k6: Validación de distribución Canary (80/20)
+├── deployment.yaml               # Despliegue base
+├── deployment-stable.yaml        # Despliegue v2 estable (4 réplicas)
+├── deployment-canary.yaml        # Despliegue v3 canary (1 réplica)
+├── Dockerfile                    # Dockerfile raíz para imágenes base
+├── load-test.js                  # k6: Medición del punto de degradación progresivo
+├── resilience-test.js            # k6: Medición de resiliencia y auto-recuperación (Self-healing)
 ├── server.js                     # Servidor HTTP Node.js v3
-├── service.yaml                  # Servicio Kubernetes NodePort
-├── smoke-test.js                 # Prueba k6: Smoke test de verificación mínima
-├── update-test.js                # Prueba k6: Medición durante Rolling Update
-├── test-canary.ps1               # Script PowerShell para validar distribución Canary
-└── test-payment.ps1              # Script de prueba adicional
+├── service.yaml                  # Servicio NodePort (puerto 30080)
+├── smoke-test.js                 # k6: Smoke test de verificación mínima
+└── update-test.js                # k6: Medición de tráfico durante Rolling Update
 ```
 
 ---
 
 ## 🧪 Pruebas Experimentales con Grafana k6
 
-### 1. Smoke Test (`smoke-test.js`)
-- **Objetivo:** Verificar la conectividad mínima y disponibilidad básica del servicio.
-- **Configuración:** 1 VU, duración corta, validación de status 200 y headers.
-
-### 2. Baseline Test (`baseline-test.js`)
-- **Objetivo:** Establecer una métrica de referencia en condiciones normales de operación sin estrés.
-- **Métricas evaluadas:** Solicitudes/seg, latencias `avg`, `p(90)`, `p(95)`, `max`.
-
-### 3. Resilience Test (`resilience-test.js`)
-- **Objetivo:** Validar la capacidad de **Self-healing** de Kubernetes.
-- **Procedimiento:** Mientras k6 envía tráfico continuo, se elimina deliberadamente un Pod réplica (`kubectl delete pod ...`).
-- **Observación:** El ReplicaSet detecta la desviación del estado deseado y crea inmediatamente un nuevo Pod sin interrumpir la disponibilidad global del servicio.
-
-### 4. Rolling Update Test (`update-test.js`)
-- **Objetivo:** Monitorear el comportamiento del sistema durante una actualización de versión sin tiempo de inactividad (*Zero-Downtime Deployment*).
-- **Observación:** Coexistencia progresiva de Pods con versión anterior y nueva hasta completar la transición sin errores `5xx`.
+| Script de Prueba | Propósito | Configuración k6 | Criterios / Thresholds |
+| :--- | :--- | :--- | :--- |
+| **`smoke-test.js`** | Verificación mínima de funcionamiento | 1 VU, 10 s | `status is 200`, `response contains version` |
+| **`baseline-test.js`** | Línea base en condiciones estables | 200 VUs, 30 s | `http_req_failed < 0.01`, `p(95) < 250ms` |
+| **`resilience-test.js`** | Resiliencia ante eliminación de un Pod | Rampa 0→20→0 VUs (60 s) | `http_req_failed < 0.01`, `p(95) < 500ms`, `checks > 0.99` |
+| **`update-test.js`** | Tráfico durante Rolling Update (v2 → v3) | 10 VUs, 60 s | `http_req_failed < 0.01`, `p(95) < 500ms`, `checks > 0.99` |
+| **`canary-test.js`** | Distribución de tráfico (80% v2 / 20% v3) | 10 VUs, 30 s | Métricas custom: `solicitudes_v2`, `solicitudes_v3`, `proporcion_v3` |
+| **`load-test.js`** | Punto de degradación (1, 3 y 10 réplicas) | 20, 50, 100, 200 VUs | `p(95) < 250ms`, detección de quiebre de latencia |
+| **`consistency-test.js`** | Consistencia distribuida (100 VUs) | 100 VUs, 1 iteración | `count == 100`, verificación atómica y sin duplicados |
 
 ---
 
 ## 🎯 Retos Independientes
 
 ### Reto 1: Consistencia del Estado Distribuido (`consistencia/`)
-* **Problema:** Múltiples réplicas de Node.js mantienen memoria independiente, por lo que solicitudes atendidas por distintos Pods incrementan contadores locales aislados.
-* **Solución Implementada:** Servicio de Coordinador Central en Memoria con:
-  - Manejo de cabecera `Idempotency-Key` por operación.
-  - Validación de `epoch` única para detectar reinicios no controlados.
-  - Procesamiento atómico en el event loop sin operaciones de I/O bloqueantes.
-* **Prueba de Concurrencia (`consistency-test.js`):**
-  - 100 operaciones concurrentes simultáneas (`100 VUs`).
-  - Resultado final exacto: **100**, eliminando condiciones de carrera y duplicados.
+* **Problema:** En arquitecturas de réplicas en Kubernetes, la memoria no se comparte automáticamente, produciendo contadores locales aislados.
+* **Solución Implementada:** Servicio de Coordinador Central en Memoria:
+  - Manejo de cabecera `Idempotency-Key` para evitar operaciones duplicadas ante reintentos.
+  - Validación de `epoch` única generada al inicio del proceso para detectar reinicios.
+  - Reenvío no bloqueante mediante el Service interno `counter-coordinator:3000`.
+* **Prueba de Concurrencia:** 100 incrementos concurrentes resultan en exactamente 100 operaciones registradas sin pérdida de actualizaciones.
 
 ### Reto 2: Canary Deployment (`canary-test.js`)
 * **Estrategia:** Distribución ponderada mediante proporción de réplicas en Kubernetes:
-  - 4 Réplicas de versión Estable (`v2`) → **~80% del tráfico**.
-  - 1 Réplica de versión Canary (`v3`) → **~20% del tráfico**.
-* Ambos Deployments comparten el mismo selector de etiquetas en el `service.yaml`.
-* k6 registra en cada iteración el VU, el Pod y la Versión que atendió la petición, confirmando la coexistencia y ratio de distribución.
+  - 4 Réplicas del grupo Estable (`v2`) → **~80% del tráfico**.
+  - 1 Réplica del grupo Canary (`v3`) → **~20% del tráfico**.
+* Ambos Deployments se enlazan al mismo `service.yaml` mediante la etiqueta común `app=distributed-app`.
+* Los resultados experimentales confirmaron un reparto de **78.8% v2** y **21.2% v3** con cero errores HTTP.
 
 ### Reto 3: Punto de Degradación del Sistema (`load-test.js`)
-* **Metodología:** Pruebas progresivas de carga variando los Virtual Users (20, 50, 100, 200, 500 VUs) comparando escenarios con **1, 3 y 10 réplicas**.
-* **Criterios de Quiebre:**
-  - Aumento drástico de latencia `p(95)`.
-  - Aparición de errores HTTP (`http_req_failed > 0`).
-  - Saturación del *throughput* (Requests/sec deja de escalar).
-* **Análisis de Infraestructura:** Se documenta por qué 10 Pods sobre el mismo nodo de Docker Desktop comparten CPU y memoria del host, demostrando que el escalamiento horizontal local tiene límites físicos impuestos por el hardware del nodo.
+* **Metodología:** Pruebas progresivas de carga variando los Virtual Users (20, 50, 100 y 200 VUs) comparando **1, 3 y 10 réplicas**.
+* **Observación Clave:** El primer incumplimiento del umbral `p(95) < 250 ms` ocurrió a partir de **200 VUs** en los tres escenarios.
+* **Límite Físico de Infraestructura:** Se concluye que 10 Pods ejecutándose en el mismo nodo local de Docker Desktop comparten los núcleos de CPU, la memoria RAM y la pila de red del host, por lo que escalar Pods en un nodo saturado incrementa la contención de contexto en lugar de aumentar linealmente la capacidad.
 
 ---
 
 ## 🚀 Despliegue y Ejecución
-
-### Requisitos Previos
-- Docker Desktop con Kubernetes habilitado
-- Node.js v18+
-- Grafana k6
-- kubectl
 
 ### 1. Despliegue de la Aplicación Base
 ```bash
@@ -161,32 +143,33 @@ kubectl get svc
 
 ### 2. Ejecutar Pruebas con k6
 ```bash
-# Ejecutar smoke test
+# Smoke test
 k6 run smoke-test.js
 
-# Ejecutar baseline test
+# Baseline test
 k6 run baseline-test.js
 
-# Ejecutar prueba de actualización (Rolling Update)
+# Rolling update test
 k6 run update-test.js
+
+# Canary deployment test
+k6 run canary-test.js
+
+# Punto de degradación (ejemplo con 50 VUs)
+k6 run -e VUS=50 load-test.js
 ```
 
 ### 3. Despliegue del Módulo de Consistencia
 ```bash
 cd consistencia
 
-# Aplicar coordinador y réplicas de aplicación
+# Construir imagen v4
+docker build -t distributed-app:v4 .
+
+# Desplegar coordinador y aplicación v4
 kubectl apply -f coordinator.yaml
 kubectl apply -f application.yaml
 
-# Ejecutar prueba de consistencia distribuida
+# Ejecutar prueba de consistencia concurrente
 k6 run consistency-test.js
 ```
-
----
-
-## 📄 Informe Técnico
-
-El informe formal completo con capturas de pantalla, tablas comparativas, análisis de métricas y conclusiones técnicas se encuentra disponible en:
-- Formato PDF: [`Lab1_Consistencia_Disponibilidad_Romero_Jhonny.pdf`](./Lab1_Consistencia_Disponibilidad_Romero_Jhonny.pdf)
-- Documento editable: [`Lab1RomeroJhonny.docx`](./Lab1RomeroJhonny.docx)

@@ -1,19 +1,26 @@
+# Documentos e informes (entregables Moodle)
+*.docx
+*.pdf
+~$*.docx
+
+# Scripts de utilidad local / reparación
+reparar-kubernetes.bat
+test-*.ps1
+server.yaml
+
 # Logs
-debug.log
 *.log
+debug.log
 npm-debug.log*
 
-# OS and Editor files
+# Entorno y sistema operativo
 .DS_Store
 Thumbs.db
 desktop.ini
 .vscode/
 .idea/
 
-# Dependencies
+# Dependencias
 node_modules/
-
-# Word temp locks
-~$*.docx
 *.tmp
 *.bak
