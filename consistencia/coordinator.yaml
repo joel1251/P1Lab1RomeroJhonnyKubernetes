@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: counter-coordinator
+  labels:
+    app: counter-coordinator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: counter-coordinator
+  template:
+    metadata:
+      labels:
+        app: counter-coordinator
+    spec:
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: coordinator
+          image: distributed-app:v4
+          imagePullPolicy: Never
+          command: ["node", "coordinator.js"]
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 1
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: counter-coordinator
+  labels:
+    app: counter-coordinator
+spec:
+  type: ClusterIP
+  selector:
+    app: counter-coordinator
+  ports:
+    - port: 3000
+      targetPort: 3000

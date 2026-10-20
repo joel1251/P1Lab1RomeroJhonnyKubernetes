@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: distributed-app
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: distributed-app
+  template:
+    metadata:
+      labels:
+        app: distributed-app
+    spec:
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: distributed-app
+          image: distributed-app:v4
+          imagePullPolicy: Never
+          command: ["node", "server.js"]
+          env:
+            - name: COORDINATOR_URL
+              value: "http://counter-coordinator:3000"
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 1
+            periodSeconds: 2

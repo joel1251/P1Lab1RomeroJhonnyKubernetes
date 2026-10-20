@@ -1,0 +1,19 @@
+# Logs
+debug.log
+*.log
+npm-debug.log*
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+
+# Word temp locks
+~$*.docx
+*.tmp
+*.bak

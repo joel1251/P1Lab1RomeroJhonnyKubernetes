@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: distributed-app-stable
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: distributed-app
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: distributed-app
+        track: stable
+    spec:
+      containers:
+        - name: distributed-app
+          image: distributed-app:v2
+          imagePullPolicy: Never
+          env:
+            - name: APP_VERSION
+              value: "v2"
+            - name: APP_MESSAGE
+              value: "Versión ESTABLE (v2)"
+          ports:
+            - containerPort: 3000
